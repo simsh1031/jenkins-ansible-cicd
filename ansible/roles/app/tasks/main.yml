@@ -16,7 +16,11 @@
 
 - name: Load Sohyeon Docker image
   ansible.builtin.command:
-    cmd: "docker load -i /tmp/{{ app_name }}-{{ image_tag }}.tar"
+    argv:
+      - sg
+      - docker
+      - -c
+      - "docker load -i /tmp/{{ app_name }}-{{ image_tag }}.tar"
   register: docker_load_result
   changed_when: >
     'Loaded image' in docker_load_result.stdout
@@ -26,26 +30,38 @@
 
 - name: Check existing Sohyeon container
   ansible.builtin.command:
-    cmd: "docker ps -a -q -f name=^{{ app_name }}$"
+    argv:
+      - sg
+      - docker
+      - -c
+      - "docker ps -a -q -f name=^{{ app_name }}$"
   register: existing_container
   changed_when: false
 
 
 - name: Remove existing Sohyeon container
   ansible.builtin.command:
-    cmd: "docker rm -f {{ app_name }}"
+    argv:
+      - sg
+      - docker
+      - -c
+      - "docker rm -f {{ app_name }}"
   when: existing_container.stdout | length > 0
 
 
 - name: Run Sohyeon application container
   ansible.builtin.command:
-    cmd: >
-      docker run -d
-      --name {{ app_name }}
-      --restart unless-stopped
-      -e APP_VERSION=v{{ image_tag }}
-      -p {{ host_port }}:{{ container_port }}
-      {{ image_name }}:{{ image_tag }}
+    argv:
+      - sg
+      - docker
+      - -c
+      - >-
+        docker run -d
+        --name {{ app_name }}
+        --restart unless-stopped
+        -e APP_VERSION=v{{ image_tag }}
+        -p {{ host_port }}:{{ container_port }}
+        {{ image_name }}:{{ image_tag }}
 
 
 - name: Wait for Sohyeon application health check
