@@ -19,7 +19,7 @@ pipeline {
     environment {
         IMAGE_NAME = 'sohyeon-cicd-app'
         TEST_CONTAINER = 'sohyeon-cicd-test'
-        NGINX_URL = 'http://1.201.116.156:18007'
+        // NGINX_URL = 'http://1.201.116.156:18007'
     }
 
     stages {
@@ -202,25 +202,27 @@ pipeline {
 
         stage('Verify') {
             steps {
-                sh '''
-                    echo "=== Verify Through Nginx ==="
-
-                    HEALTH_RESULT=$(
-                      curl --fail --silent \
-                      ${NGINX_URL}/health
+                withCredentials([
+                    sshUserPrivateKey(
+                        credentialsId: 'sohyeon-deploy-ssh',
+                        keyFileVariable: 'SSH_KEY',
+                        usernameVariable: 'SSH_USER'
                     )
+                ]) {
+                    sh '''
+                        echo "=== Verify Through Nginx ==="
 
-                    VERSION_RESULT=$(
-                      curl --fail --silent \
-                      ${NGINX_URL}/version
-                    )
+                        export ANSIBLE_PRIVATE_KEY_FILE="${SSH_KEY}"
+                        export ANSIBLE_REMOTE_USER="${SSH_USER}"
+                        export ANSIBLE_SSH_ARGS="-o UserKnownHostsFile=${WORKSPACE}/.ssh/known_hosts -o StrictHostKeyChecking=yes"
 
-                    echo "health=${HEALTH_RESULT}"
-                    echo "version=${VERSION_RESULT}"
-
-                    test "${HEALTH_RESULT}" = "OK"
-                    test "${VERSION_RESULT}" = "v${BUILD_NUMBER}"
-                '''
+                        ansible-playbook \
+                        -i ansible/inventory.ini \
+                        ansible/verify.yml \
+                        --limit load_balancer \
+                        -e "image_tag=${BUILD_NUMBER}"
+                    '''
+                }
             }
         }
     }
