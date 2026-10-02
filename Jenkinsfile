@@ -30,7 +30,14 @@ pipeline {
                     echo "=== Jenkins Agent ==="
                     hostname
                     whoami
+                    id
                     pwd
+
+                    echo "=== Docker Socket ==="
+                    ls -l /var/run/docker.sock
+
+                    echo "=== Docker Group Test ==="
+                    sg docker -c "docker ps"
 
                     echo "=== Required Tools ==="
                     docker --version
@@ -46,10 +53,8 @@ pipeline {
         stage('Build') {
             steps {
                 sh '''
-                    echo "=== Build Docker Image ==="
-
-                    docker build \
-                      -t ${IMAGE_NAME}:${BUILD_NUMBER} .
+                    sg docker -c \
+                    "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
                 '''
             }
         }
@@ -60,24 +65,28 @@ pipeline {
                 sh '''
                     echo "=== Test Docker Image ==="
 
-                    docker rm -f ${TEST_CONTAINER} \
-                      2>/dev/null || true
+                    sg docker -c \
+                    "docker rm -f ${TEST_CONTAINER}" \
+                    2>/dev/null || true
 
-                    docker run -d \
-                      --name ${TEST_CONTAINER} \
-                      -e APP_VERSION=v${BUILD_NUMBER} \
-                      ${IMAGE_NAME}:${BUILD_NUMBER}
+                    sg docker -c \
+                    "docker run -d \
+                    --name ${TEST_CONTAINER} \
+                    -e APP_VERSION=v${BUILD_NUMBER} \
+                    ${IMAGE_NAME}:${BUILD_NUMBER}"
 
                     sleep 2
 
                     HEALTH_RESULT=$(
-                      docker exec ${TEST_CONTAINER} \
-                      wget -qO- http://127.0.0.1/health
+                    sg docker -c \
+                        "docker exec ${TEST_CONTAINER} \
+                        wget -qO- http://127.0.0.1/health"
                     )
 
                     VERSION_RESULT=$(
-                      docker exec ${TEST_CONTAINER} \
-                      wget -qO- http://127.0.0.1/version
+                    sg docker -c \
+                        "docker exec ${TEST_CONTAINER} \
+                        wget -qO- http://127.0.0.1/version"
                     )
 
                     echo "health=${HEALTH_RESULT}"
@@ -86,7 +95,8 @@ pipeline {
                     test "${HEALTH_RESULT}" = "OK"
                     test "${VERSION_RESULT}" = "v${BUILD_NUMBER}"
 
-                    docker rm -f ${TEST_CONTAINER}
+                    sg docker -c \
+                    "docker rm -f ${TEST_CONTAINER}"
                 '''
             }
         }
@@ -95,13 +105,12 @@ pipeline {
         stage('Prepare Artifact') {
             steps {
                 sh '''
-                    echo "=== Prepare Deployment Artifact ==="
-
                     mkdir -p .artifacts
 
-                    docker save \
-                      -o .artifacts/${IMAGE_NAME}.tar \
-                      ${IMAGE_NAME}:${BUILD_NUMBER}
+                    sg docker -c \
+                    "docker save \
+                    -o .artifacts/${IMAGE_NAME}.tar \
+                    ${IMAGE_NAME}:${BUILD_NUMBER}"
                 '''
             }
         }
@@ -220,22 +229,13 @@ pipeline {
     post {
         always {
             sh '''
-                echo "=== Cleanup Sohyeon temporary resources ==="
-
-                docker rm -f ${TEST_CONTAINER} \
-                  2>/dev/null || true
+                sg docker -c \
+                "docker rm -f ${TEST_CONTAINER}" \
+                2>/dev/null || true
 
                 rm -rf .artifacts
                 rm -rf .ssh
             '''
-        }
-
-        success {
-            echo 'Sohyeon CI/CD Pipeline SUCCESS'
-        }
-
-        failure {
-            echo 'Sohyeon CI/CD Pipeline FAILED'
         }
     }
 }
