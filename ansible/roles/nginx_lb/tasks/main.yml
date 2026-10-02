@@ -1,0 +1,17 @@
+---
+- name: Deploy Sohyeon personal Nginx configuration
+  ansible.builtin.template:
+    src: sohyeon.conf.j2
+    dest: /etc/nginx/conf.d/sohyeon.conf
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  notify: Reload Nginx
+
+
+- name: Validate Nginx configuration
+  ansible.builtin.command:
+    cmd: nginx -t
+  become: true
+  changed_when: false

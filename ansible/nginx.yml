@@ -1,0 +1,7 @@
+---
+- name: Configure Sohyeon Nginx load balancer
+  hosts: load_balancer
+  gather_facts: false
+
+  roles:
+    - role: nginx_lb

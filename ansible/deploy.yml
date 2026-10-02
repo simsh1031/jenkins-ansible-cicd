@@ -1,0 +1,7 @@
+---
+- name: Deploy Sohyeon CI/CD application
+  hosts: app_servers
+  gather_facts: false
+
+  roles:
+    - role: app
