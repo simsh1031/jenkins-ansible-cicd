@@ -1,3 +1,4 @@
+// Docker 이미지 빌드·테스트와 Ansible 배포·검증 파이프라인
 pipeline {
     agent {
         label 'ansible-agent'
@@ -17,6 +18,8 @@ pipeline {
     }
 
     environment {
+        // 공용 레포 루트 기준 프로젝트 경로
+        PROJECT_DIR = 'practice/sohyeon'
         IMAGE_NAME = 'sohyeon-cicd-app'
         TEST_CONTAINER = 'sohyeon-cicd-test'
         // NGINX_URL = 'http://1.201.116.156:18007'
@@ -26,115 +29,115 @@ pipeline {
 
         stage('Check Environment') {
             steps {
-                sh '''
-                    echo "=== Jenkins Agent ==="
-                    hostname
-                    whoami
-                    id
-                    pwd
+                dir(env.PROJECT_DIR) {
+                    sh '''
+                        echo "=== Jenkins Agent ==="
+                        hostname
+                        whoami
+                        id
+                        pwd
 
-                    echo "=== Docker Socket ==="
-                    ls -l /var/run/docker.sock
+                        echo "=== Docker Socket ==="
+                        ls -l /var/run/docker.sock
 
-                    echo "=== Docker Group Test ==="
-                    sg docker -c "docker ps"
+                        echo "=== Docker Group Test ==="
+                        sg docker -c "docker ps"
 
-                    echo "=== Required Tools ==="
-                    docker --version
-                    ansible --version
-                    git --version
-                    curl --version
-                    ssh -V
-                '''
+                        echo "=== Required Tools ==="
+                        docker --version
+                        ansible --version
+                        git --version
+                        curl --version
+                        ssh -V
+                    '''
+                }
             }
         }
 
 
         stage('Build') {
             steps {
-                sh '''
-                    sg docker -c \
-                    "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
-                '''
+                dir(env.PROJECT_DIR) {
+                    sh '''
+                        sg docker -c \
+                        "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
+                    '''
+                }
             }
         }
 
 
         stage('Test') {
             steps {
-                sh '''
-                    echo "=== Test Docker Image ==="
+                dir(env.PROJECT_DIR) {
+                    sh '''
+                        echo "=== Test Docker Image ==="
 
-                    sg docker -c \
-                    "docker rm -f ${TEST_CONTAINER}" \
-                    2>/dev/null || true
+                        sg docker -c \
+                        "docker rm -f ${TEST_CONTAINER}" \
+                        2>/dev/null || true
 
-                    sg docker -c \
-                    "docker run -d \
-                    --name ${TEST_CONTAINER} \
-                    -e APP_VERSION=v${BUILD_NUMBER} \
-                    ${IMAGE_NAME}:${BUILD_NUMBER}"
+                        sg docker -c \
+                        "docker run -d \
+                        --name ${TEST_CONTAINER} \
+                        -e APP_VERSION=v${BUILD_NUMBER} \
+                        ${IMAGE_NAME}:${BUILD_NUMBER}"
 
-                    sleep 2
+                        sleep 2
 
-                    HEALTH_RESULT=$(
-                    sg docker -c \
-                        "docker exec ${TEST_CONTAINER} \
-                        wget -qO- http://127.0.0.1/health"
-                    )
+                        HEALTH_RESULT=$(
+                        sg docker -c \
+                            "docker exec ${TEST_CONTAINER} \
+                            wget -qO- http://127.0.0.1/health"
+                        )
 
-                    VERSION_RESULT=$(
-                    sg docker -c \
-                        "docker exec ${TEST_CONTAINER} \
-                        wget -qO- http://127.0.0.1/version"
-                    )
+                        VERSION_RESULT=$(
+                        sg docker -c \
+                            "docker exec ${TEST_CONTAINER} \
+                            wget -qO- http://127.0.0.1/version"
+                        )
 
-                    echo "health=${HEALTH_RESULT}"
-                    echo "version=${VERSION_RESULT}"
+                        echo "health=${HEALTH_RESULT}"
+                        echo "version=${VERSION_RESULT}"
 
-                    test "${HEALTH_RESULT}" = "OK"
-                    test "${VERSION_RESULT}" = "v${BUILD_NUMBER}"
+                        test "${HEALTH_RESULT}" = "OK"
+                        test "${VERSION_RESULT}" = "v${BUILD_NUMBER}"
 
-                    sg docker -c \
-                    "docker rm -f ${TEST_CONTAINER}"
-                '''
+                        sg docker -c \
+                        "docker rm -f ${TEST_CONTAINER}"
+                    '''
+                }
             }
         }
 
 
         stage('Prepare Artifact') {
             steps {
-                sh '''
-                    mkdir -p .artifacts
+                dir(env.PROJECT_DIR) {
+                    sh '''
+                        mkdir -p .artifacts
 
-                    sg docker -c \
-                    "docker save \
-                    -o .artifacts/${IMAGE_NAME}.tar \
-                    ${IMAGE_NAME}:${BUILD_NUMBER}"
-                '''
+                        sg docker -c \
+                        "docker save \
+                        -o .artifacts/${IMAGE_NAME}.tar \
+                        ${IMAGE_NAME}:${BUILD_NUMBER}"
+                    '''
+                }
             }
         }
 
 
         stage('Prepare SSH') {
             steps {
-                sh '''
-                    echo "=== Prepare Private known_hosts ==="
+                dir(env.PROJECT_DIR) {
+                    sh '''
+                        echo "=== Prepare Private known_hosts ==="
 
-                    mkdir -p .ssh
-                    chmod 700 .ssh
-
-                    : > .ssh/known_hosts
-
-                    ssh-keyscan -H \
-                      1.201.118.202 \
-                      1.201.118.10 \
-                      1.201.118.90 \
-                      1.201.116.156 \
-                      >> .ssh/known_hosts
-
-                    chmod 600 .ssh/known_hosts
-                '''
+                        ansible-playbook \
+                          -i ansible/inventory.ini \
+                          ansible/playbook/prepare_ssh.yml
+                    '''
+                }
             }
         }
 
@@ -148,21 +151,23 @@ pipeline {
                         usernameVariable: 'SSH_USER'
                     )
                 ]) {
-                    sh '''
-                        echo "=== Deploy to App Servers ==="
+                    dir(env.PROJECT_DIR) {
+                        sh '''
+                            echo "=== Deploy to App Servers ==="
 
-                        export ANSIBLE_PRIVATE_KEY_FILE="${SSH_KEY}"
-                        export ANSIBLE_REMOTE_USER="${SSH_USER}"
-                        export ANSIBLE_SSH_ARGS="-o UserKnownHostsFile=${WORKSPACE}/.ssh/known_hosts -o StrictHostKeyChecking=yes"
+                            export ANSIBLE_PRIVATE_KEY_FILE="${SSH_KEY}"
+                            export ANSIBLE_REMOTE_USER="${SSH_USER}"
+                            export ANSIBLE_SSH_ARGS="-o UserKnownHostsFile=${WORKSPACE}/${PROJECT_DIR}/.ssh/known_hosts -o StrictHostKeyChecking=yes"
 
-                        ansible-playbook \
-                          -i ansible/inventory.ini \
-                          ansible/deploy.yml \
-                          --limit app_servers \
-                          -e "image_name=${IMAGE_NAME}" \
-                          -e "image_tag=${BUILD_NUMBER}" \
-                          -e "image_tar=${WORKSPACE}/.artifacts/${IMAGE_NAME}.tar"
-                    '''
+                            ansible-playbook \
+                              -i ansible/inventory.ini \
+                              ansible/playbook/deploy.yml \
+                              --limit app_servers \
+                              -e "image_name=${IMAGE_NAME}" \
+                              -e "image_tag=${BUILD_NUMBER}" \
+                              -e "image_tar=${WORKSPACE}/${PROJECT_DIR}/.artifacts/${IMAGE_NAME}.tar"
+                        '''
+                    }
                 }
             }
         }
@@ -183,18 +188,20 @@ pipeline {
                         usernameVariable: 'SSH_USER'
                     )
                 ]) {
-                    sh '''
-                        echo "=== Configure Sohyeon Nginx ==="
+                    dir(env.PROJECT_DIR) {
+                        sh '''
+                            echo "=== Configure Sohyeon Nginx ==="
 
-                        export ANSIBLE_PRIVATE_KEY_FILE="${SSH_KEY}"
-                        export ANSIBLE_REMOTE_USER="${SSH_USER}"
-                        export ANSIBLE_SSH_ARGS="-o UserKnownHostsFile=${WORKSPACE}/.ssh/known_hosts -o StrictHostKeyChecking=yes"
+                            export ANSIBLE_PRIVATE_KEY_FILE="${SSH_KEY}"
+                            export ANSIBLE_REMOTE_USER="${SSH_USER}"
+                            export ANSIBLE_SSH_ARGS="-o UserKnownHostsFile=${WORKSPACE}/${PROJECT_DIR}/.ssh/known_hosts -o StrictHostKeyChecking=yes"
 
-                        ansible-playbook \
-                          -i ansible/inventory.ini \
-                          ansible/nginx.yml \
-                          --limit load_balancer
-                    '''
+                            ansible-playbook \
+                              -i ansible/inventory.ini \
+                              ansible/playbook/nginx.yml \
+                              --limit load_balancer
+                        '''
+                    }
                 }
             }
         }
@@ -209,19 +216,21 @@ pipeline {
                         usernameVariable: 'SSH_USER'
                     )
                 ]) {
-                    sh '''
-                        echo "=== Verify Through Nginx ==="
+                    dir(env.PROJECT_DIR) {
+                        sh '''
+                            echo "=== Verify Through Nginx ==="
 
-                        export ANSIBLE_PRIVATE_KEY_FILE="${SSH_KEY}"
-                        export ANSIBLE_REMOTE_USER="${SSH_USER}"
-                        export ANSIBLE_SSH_ARGS="-o UserKnownHostsFile=${WORKSPACE}/.ssh/known_hosts -o StrictHostKeyChecking=yes"
+                            export ANSIBLE_PRIVATE_KEY_FILE="${SSH_KEY}"
+                            export ANSIBLE_REMOTE_USER="${SSH_USER}"
+                            export ANSIBLE_SSH_ARGS="-o UserKnownHostsFile=${WORKSPACE}/${PROJECT_DIR}/.ssh/known_hosts -o StrictHostKeyChecking=yes"
 
-                        ansible-playbook \
-                        -i ansible/inventory.ini \
-                        ansible/verify.yml \
-                        --limit load_balancer \
-                        -e "image_tag=${BUILD_NUMBER}"
-                    '''
+                            ansible-playbook \
+                            -i ansible/inventory.ini \
+                            ansible/playbook/verify.yml \
+                            --limit load_balancer \
+                            -e "image_tag=${BUILD_NUMBER}"
+                        '''
+                    }
                 }
             }
         }
@@ -230,14 +239,41 @@ pipeline {
 
     post {
         always {
-            sh '''
-                sg docker -c \
-                "docker rm -f ${TEST_CONTAINER}" \
-                2>/dev/null || true
+            dir(env.PROJECT_DIR) {
+                sh '''
+                    sg docker -c \
+                    "docker rm -f ${TEST_CONTAINER}" \
+                    2>/dev/null || true
 
-                rm -rf .artifacts
-                rm -rf .ssh
-            '''
+                    rm -rf .artifacts
+                    rm -rf .ssh
+
+                    # Agent의 내 앱 이미지만 정리한다. 중지된 컨테이너가 쓰는 이미지도 보존한다.
+                    if image_list=$(sg docker -c "docker image ls --format '{{.Repository}}:{{.Tag}} {{.ID}}'"); then
+                        printf '%s\n' "$image_list" | while read -r image_ref image_id; do
+                            case "$image_ref" in
+                                "${IMAGE_NAME}:"*) ;;
+                                *) continue ;;
+                            esac
+
+                            if containers=$(sg docker -c "docker ps -aq --filter ancestor=$image_id"); then
+                                if [ -n "$containers" ]; then
+                                    echo "Keeping image used by a container: $image_ref"
+                                    continue
+                                fi
+
+                                # 강제 삭제하지 않아 정리 도중 사용되기 시작한 이미지도 보호한다.
+                                sg docker -c "docker image rm $image_ref" || \
+                                    echo "Could not remove image: $image_ref"
+                            else
+                                echo "Skipping image cleanup: could not check containers for $image_ref"
+                            fi
+                        done
+                    else
+                        echo "Skipping image cleanup: could not list Docker images"
+                    fi
+                '''
+            }
         }
     }
 }

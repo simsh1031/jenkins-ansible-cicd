@@ -1,3 +1,4 @@
+# 앱 컨테이너명·이미지·포트 등 배포 변수 기본값
 ---
 app_name: sohyeon-cicd-app
 

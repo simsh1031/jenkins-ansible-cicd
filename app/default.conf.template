@@ -1,3 +1,4 @@
+# 실습 앱의 기본 응답과 상태·버전 확인 엔드포인트 설정
 server {
     listen 80;
     server_name _;

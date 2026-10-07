@@ -1,3 +1,4 @@
+# 개인 Nginx 설정 파일 배치 및 설정 문법 검사
 ---
 - name: Deploy Sohyeon personal Nginx configuration
   ansible.builtin.template:

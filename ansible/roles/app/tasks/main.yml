@@ -1,3 +1,4 @@
+# Docker 이미지 전송·로드, 컨테이너 교체 및 상태·버전 검증
 ---
 - name: Validate deployment variables
   ansible.builtin.assert:
@@ -62,7 +63,7 @@
   delay: 2
   until:
     - health_response.status == 200
-    - health_response.content | trim == "OK"
+    - health_response.content | trim == "OK" 
 
 
 - name: Check deployed application version

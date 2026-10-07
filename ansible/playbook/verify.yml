@@ -1,3 +1,4 @@
+# Nginx를 통한 앱 상태와 배포 버전 검증
 ---
 - name: Verify Sohyeon deployment through Nginx
   hosts: load_balancer
