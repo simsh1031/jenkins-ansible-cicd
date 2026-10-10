@@ -16,7 +16,7 @@ remote_project_dir: "{{ ansible_env.HOME }}/.local/share/sohyeon-cicd"
 remote_tools: "{{ remote_project_dir }}/tools"
 remote_state: "{{ remote_project_dir }}/state"
 remote_tar_dir: "{{ remote_project_dir }}/tmp"
-# 라벨 없는 Week1 컨테이너는 관리자가 확인한 전체 ID를 서버별로 명시해야 한다.
+# 프로젝트 소유권 라벨이 없는 Week1 컨테이너는 관리자가 확인한 전체 ID를 서버별로 명시해야 한다.
 legacy_container_ids:
   sohyeon-app1: "c209a79128cf027dc6fe2143b663e9de22b67ea81e0344834b8f40c286d371da"
   sohyeon-app2: "7d6c398c75042946123012133cab010450512b6f432dff420947871360a15ed4"

@@ -99,6 +99,14 @@ class PrivilegeTests(unittest.TestCase):
         legacy['container']['Config']['Labels'] = None
         self.assertNotEqual(execute(legacy, True).returncode, 0)
         self.assertEqual(execute(legacy, True, {'app1': 'a' * 64}).returncode, 0)
+        legacy['container']['Config']['Labels'] = {'maintainer': 'base image publisher'}
+        self.assertEqual(execute(legacy, True, {'app1': 'a' * 64}).returncode, 0)
+        self.assertNotEqual(execute(legacy, False, {'app1': 'a' * 64}).returncode, 0)
+        mismatch = execute(legacy, True, {'app1': 'b' * 64})
+        self.assertNotEqual(mismatch.returncode, 0)
+        self.assertIn('approved_legacy_id_matches=False', mismatch.stdout)
+        legacy['container']['Config']['Labels']['io.sohyeon.project'] = 'other-project'
+        self.assertNotEqual(execute(legacy, True, {'app1': 'a' * 64}).returncode, 0)
         wrong_port = copy.deepcopy(own)
         wrong_port['container']['HostConfig']['PortBindings']['80/tcp'][0]['HostPort'] = '20008'
         self.assertNotEqual(execute(wrong_port).returncode, 0)
