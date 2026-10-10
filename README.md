@@ -43,7 +43,7 @@ Ansible: app1 제외 → 연결 종료 대기 → 교체 → 검사 → 복귀
 
 ## Jenkins 실행
 
-저장소의 기존 checkout 구조에 맞춰 `PROJECT_DIR='practice/sohyeon'`을 유지했다. 이 프로젝트 자체가 workspace 루트라면 `PROJECT_DIR='.'`로 바꾼다.
+이 저장소는 `Jenkinsfile`, `ansible.cfg`, `ansible/`, `scripts/`가 checkout 루트에 있으므로 `PROJECT_DIR='.'`를 사용한다. 로컬의 `practice/sohyeon` 경로를 Jenkins workspace에 덧붙이지 않는다. 시작 시 필수 파일을 확인하고 누락되면 작업 경로와 누락 목록을 출력한다. 경로 검증에 실패하면 post 정리도 건너뛴다.
 
 1. [inventory.ini](ansible/inventory.ini)와 [공통 변수](ansible/group_vars/all.yml)를 확인한다.
 2. 기존 Week1 앱을 처음 전환할 때 `APP_VERSION=v1`, `BOOTSTRAP=true`로 실행한다. 기존 `/health`·`/version` 계약을 허용하면서 한 대씩 새 앱으로 교체한다.

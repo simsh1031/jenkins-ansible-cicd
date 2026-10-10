@@ -18,8 +18,8 @@ pipeline {
     }
     // 공통 작업 경로·이미지 이름·로그 출력 설정을 정의한다.
     environment {
-        // 기존 공용 저장소 checkout 구조를 유지한다.
-        PROJECT_DIR = 'practice/sohyeon'
+        // 이 저장소는 Jenkinsfile과 ansible/이 checkout 루트에 있다.
+        PROJECT_DIR = '.'
         IMAGE_NAME = 'sohyeon-cicd-app'
         ANSIBLE_FORCE_COLOR = 'false'
         DOCKER_HOST = 'unix:///var/run/docker.sock'
@@ -31,6 +31,13 @@ pipeline {
             steps {
                 dir(env.PROJECT_DIR) {
                     script {
+                        def requiredFiles = ['ansible.cfg', 'ansible/requirements.yml',
+                                             'scripts/cleanup.py', 'scripts/cleanup_workspace.py']
+                        def missingFiles = requiredFiles.findAll { !fileExists(it) }
+                        if (missingFiles) {
+                            error("Project files missing in ${pwd()}: ${missingFiles.join(', ')}. Check PROJECT_DIR and the checked-out commit.")
+                        }
+                        env.PROJECT_READY = 'true'
                         if (!(params.APP_VERSION ==~ /v[0-9]+/)) {
                             error('APP_VERSION must be v followed by digits')
                         }
@@ -42,7 +49,6 @@ pipeline {
                         env.ANSIBLE_COLLECTIONS_PATH = "${pwd()}/.ansible/collections"
                         env.GIT_REVISION = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
                         env.RELEASE_ID = "${params.APP_VERSION}-${env.GIT_REVISION.take(12)}-${env.BUILD_NUMBER}"
-                        env.TEST_CONTAINER = "sohyeon-cicd-test-${env.BUILD_NUMBER}"
                         env.ARTIFACT_DIR = ".artifacts/${env.BUILD_NUMBER}"
                     }
                     sh '''
@@ -63,6 +69,9 @@ pipeline {
         stage('Build & Test Image') {
             steps {
                 dir(env.PROJECT_DIR) {
+                    script {
+                        env.TEST_CONTAINER = "sohyeon-cicd-test-${env.BUILD_NUMBER}"
+                    }
                     sh '''
                         set -eu
                         sg docker -c "docker build --build-arg APP_VERSION=$APP_VERSION --build-arg RELEASE_ID=$RELEASE_ID --build-arg GIT_REVISION=$GIT_REVISION -t $IMAGE_NAME:$RELEASE_ID ."
@@ -200,6 +209,10 @@ sg docker -c "python3 scripts/cleanup.py apply --scope agent --release $RELEASE_
                 // archive에 성공한 보고서 중복본만 정리하고 실패 시 원본은 보존한다.
                 sh '''
                     set +x
+                    if [ "${PROJECT_READY:-false}" != true ]; then
+                        echo 'Project validation did not finish; no build resources to clean.'
+                        exit 0
+                    fi
                     cleanup_rc=0
                     if [ -n "${TEST_CONTAINER:-}" ]; then
                         sg docker -c "python3 scripts/cleanup.py test-cleanup --container $TEST_CONTAINER --release $RELEASE_ID" || cleanup_rc=$?
