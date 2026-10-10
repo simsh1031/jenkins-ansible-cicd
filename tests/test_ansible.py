@@ -19,6 +19,21 @@ from http.server import BaseHTTPRequestHandler
 
 @unittest.skipUnless(yaml and shutil.which('ansible-playbook'), 'Requires Ansible and its PyYAML dependency')
 class AnsibleTests(unittest.TestCase):
+    def test_lb_preparation_requires_all_three_current_release_markers(self):
+        guard = yaml.safe_load((ROOT / 'ansible/playbook/prepare.yml').read_text())[1]['pre_tasks'][0]
+        for markers, allowed in ((['target', 'target', 'target'], True),
+                                 (['target', '', 'target'], False),
+                                 (['target', 'previous', 'target'], False)):
+            with self.subTest(markers=markers), tempfile.TemporaryDirectory() as directory:
+                play = [{'hosts': 'app1', 'gather_facts': False,
+                         'vars': {'image_tag': 'target'}, 'tasks': [
+                             {'ansible.builtin.add_host': {'name': '{{ item.name }}',
+                                                          'prepared_release': '{{ item.release }}'},
+                              'loop': [{'name': f'app{i}', 'release': release}
+                                       for i, release in enumerate(markers, 1)]}, guard]}]
+                result = self.execute(play, directory)
+                self.assertEqual(result.returncode == 0, allowed, result.stdout + result.stderr)
+
     def execute(self, play, directory, extra=None):
         """임시 로컬 인벤토리와 플레이북을 만들어 원격 접속 없이 Ansible을 실행하고 결과를 반환한다."""
         directory = Path(directory)

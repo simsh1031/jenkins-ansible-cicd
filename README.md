@@ -106,6 +106,8 @@ ansible-playbook -i ansible/inventory.ini ansible/playbook/deploy.yml --syntax-c
 
 ### 관리자 권한 경계
 
+Jenkins는 호스트 키 검증 옵션을 `ANSIBLE_SSH_COMMON_ARGS`로 추가해 기본 SSH 연결 재사용(`ControlMaster`/`ControlPersist`)을 유지한다. 연결 소켓은 프로젝트 `.ansible/cp`에 두고, SSH 연결 오류에는 최대 2회 재시도한다. HTTP 검증의 원격 실행은 `throttle: 1`로 제한한다. 앱 3대 모두 이번 이미지 준비를 완료해야 LB 준비 단계가 진행된다. 서버의 sshd 설정은 변경하지 않는다.
+
 상태·임시 파일은 배포 계정 권한으로 처리하고, Docker 모듈과 Docker 저장소 공간 검사는 개별 `become`으로 실행한다. 정리 도우미는 Docker 조회 명령에만 sudo를 사용한다. LB에서는 심소현의 `/etc/nginx/conf.d/sohyeon.conf` 후보 검증·원자적 교체·등록된 임시 파일 삭제·`nginx -t`·reload와 워커 drain에 기존 관리자 권한을 사용한다. 컨테이너 이름·소유권·포트, 이미지 tar의 태그·라벨과 삭제 대상의 소유권을 검사한다. 다른 사용자 설정 파일, 공용 `nginx.conf`, sudoers·계정 그룹·Docker 소켓 권한은 변경하지 않는다. 공용 LB reload는 다른 스터디원의 배포와 동시에 실행하지 않도록 작업 시간을 조율해야 한다.
 
 ## Ansible Galaxy

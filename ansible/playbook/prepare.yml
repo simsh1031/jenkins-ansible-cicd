@@ -145,6 +145,10 @@
         path: "{{ remote_tar_dir }}/{{ app_name }}-{{ image_tag }}.tar"
         state: absent
 
+    - name: Record that this server completed image preparation
+      ansible.builtin.set_fact:
+        prepared_release: "{{ image_tag }}"
+
 # LB 설정과 서비스 상태를 검사하고 트래픽 관측에 필요한 구성을 준비한다.
 - name: Preflight and prepare the load balancer
   hosts: load_balancer
@@ -152,6 +156,12 @@
   any_errors_fatal: true
   become: false
   pre_tasks:
+    - name: Require every application server to finish before touching the LB
+      ansible.builtin.assert:
+        that:
+          - hostvars[item].prepared_release | default('') == image_tag
+        fail_msg: "{{ item }} did not complete image preparation. LB preparation is blocked."
+      loop: "{{ groups['app_servers'] }}"
     - ansible.builtin.include_role:
         name: "{{ playbook_dir }}/../roles/runtime"
   tasks:

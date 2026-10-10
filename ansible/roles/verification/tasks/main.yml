@@ -17,6 +17,7 @@
       bootstrap: "{{ bootstrap | bool }}"
       timeout: "{{ request_timeout | float }}"
   delegate_to: "{{ check_from }}"
+  throttle: 1
   become: false
   register: application_verification
   changed_when: false

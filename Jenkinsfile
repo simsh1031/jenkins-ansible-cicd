@@ -104,7 +104,7 @@ set -euo pipefail
 set +x
 export ANSIBLE_PRIVATE_KEY_FILE="$SSH_KEY"
 export ANSIBLE_REMOTE_USER="$SSH_USER"
-export ANSIBLE_SSH_ARGS="-o UserKnownHostsFile=$PWD/.ssh/known_hosts -o StrictHostKeyChecking=yes"
+export ANSIBLE_SSH_COMMON_ARGS="-o UserKnownHostsFile=$PWD/.ssh/known_hosts -o StrictHostKeyChecking=yes"
 # 원격 접속에 사용할 호스트 키를 준비하고 측정 도구용 인벤토리를 저장한다.
 ansible-playbook -i ansible/inventory.ini ansible/playbook/prepare_ssh.yml
 ansible-inventory -i ansible/inventory.ini --list > "$ARTIFACT_DIR/inventory.json"
@@ -125,7 +125,7 @@ set -euo pipefail
 set +x
 export ANSIBLE_PRIVATE_KEY_FILE="$SSH_KEY"
 export ANSIBLE_REMOTE_USER="$SSH_USER"
-export ANSIBLE_SSH_ARGS="-o UserKnownHostsFile=$PWD/.ssh/known_hosts -o StrictHostKeyChecking=yes"
+export ANSIBLE_SSH_COMMON_ARGS="-o UserKnownHostsFile=$PWD/.ssh/known_hosts -o StrictHostKeyChecking=yes"
 probe_options=()
 if [ "$BOOTSTRAP" = true ]; then probe_options+=(--bootstrap); fi
 # probe가 배포 전 30초 → Ansible 순차 배포 → 배포 후 60초 전체를 관측한다.
@@ -149,7 +149,7 @@ set -euo pipefail
 set +x
 export ANSIBLE_PRIVATE_KEY_FILE="$SSH_KEY"
 export ANSIBLE_REMOTE_USER="$SSH_USER"
-export ANSIBLE_SSH_ARGS="-o UserKnownHostsFile=$PWD/.ssh/known_hosts -o StrictHostKeyChecking=yes"
+export ANSIBLE_SSH_COMMON_ARGS="-o UserKnownHostsFile=$PWD/.ssh/known_hosts -o StrictHostKeyChecking=yes"
 python3 -c 'import json,os; assert json.load(open(os.environ["ARTIFACT_DIR"] + "/summary.json"))["passed"] is True'
 ansible-playbook -i ansible/inventory.ini ansible/playbook/cleanup.yml \
   -e "@$ARTIFACT_DIR/release.json" -e cleanup_mode=plan \
@@ -175,7 +175,7 @@ set -euo pipefail
 set +x
 export ANSIBLE_PRIVATE_KEY_FILE="$SSH_KEY"
 export ANSIBLE_REMOTE_USER="$SSH_USER"
-export ANSIBLE_SSH_ARGS="-o UserKnownHostsFile=$PWD/.ssh/known_hosts -o StrictHostKeyChecking=yes"
+export ANSIBLE_SSH_COMMON_ARGS="-o UserKnownHostsFile=$PWD/.ssh/known_hosts -o StrictHostKeyChecking=yes"
 ansible-playbook -i ansible/inventory.ini ansible/playbook/cleanup.yml \
   -e "@$ARTIFACT_DIR/release.json" -e cleanup_mode=apply \
   -e "cleanup_artifacts=$PWD/$ARTIFACT_DIR" 2>&1 | tee "$ARTIFACT_DIR/cleanup-apply.log"
