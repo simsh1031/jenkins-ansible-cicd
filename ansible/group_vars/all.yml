@@ -17,7 +17,10 @@ remote_tools: "{{ remote_project_dir }}/tools"
 remote_state: "{{ remote_project_dir }}/state"
 remote_tar_dir: "{{ remote_project_dir }}/tmp"
 # 라벨 없는 Week1 컨테이너는 관리자가 확인한 전체 ID를 서버별로 명시해야 한다.
-legacy_container_ids: {}
+legacy_container_ids:
+  sohyeon-app1: "c209a79128cf027dc6fe2143b663e9de22b67ea81e0344834b8f40c286d371da"
+  sohyeon-app2: "7d6c398c75042946123012133cab010450512b6f432dff420947871360a15ed4"
+  sohyeon-app3: "ea6470102e3b9054e3faafe14265434b9e25ec8c5a776e845078acd3d4e5719c"
 # 평상시 제외 서버는 없으며 서버별 배포 중에만 한 대를 제외한다.
 excluded_hosts: []
 # 기존 Week1 응답 허용 여부다. Jenkins의 최초 v1 전환에서만 활성화한다.
