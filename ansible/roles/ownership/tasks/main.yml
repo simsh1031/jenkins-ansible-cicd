@@ -11,6 +11,7 @@
     docker_host: unix:///var/run/docker.sock
     name: sohyeon-cicd-app
   register: owned_container
+  become: true
   no_log: true
 - name: Require the application to exist
   ansible.builtin.assert:
@@ -22,7 +23,9 @@
       - >-
         ((owned_container.container.Config.Labels | default({}, true)).get('io.sohyeon.owner') == 'sohyeon'
         and (owned_container.container.Config.Labels | default({}, true)).get('io.sohyeon.project') == 'sohyeon-cicd')
-        or (bootstrap | bool and owned_container.container.Id == legacy_container_ids.get(inventory_hostname, ''))
+        or (bootstrap | bool
+        and not (owned_container.container.Config.Labels | default({}, true))
+        and owned_container.container.Id == legacy_container_ids.get(inventory_hostname, ''))
       - owned_container.container.HostConfig.PortBindings | default({}, true) | length == 1
       - >-
         (owned_container.container.HostConfig.PortBindings | default({}, true)).get('80/tcp', [])

@@ -61,6 +61,9 @@ class GalaxyTests(unittest.TestCase):
             task = next(task for task in yaml.safe_load((ROOT / 'ansible/roles/cleanup/tasks/delete_item.yml').read_text())[0]['block']
                         if 'community.docker.docker_image_remove' in task)
             task = copy.deepcopy(task)
+            self.assertIs(task['become'], True)
+            # This test talks only to a local fake API; it must not invoke sudo.
+            task['become'] = False
             task.pop('no_log')
             task['community.docker.docker_image_remove']['docker_host'] = base.replace('http:', 'tcp:')
             play = [{'hosts': 'localhost', 'gather_facts': False, 'connection': 'local',

@@ -1,8 +1,11 @@
 """Cleanup regression checks: recovery protection, changed resources and archive gates."""
 import json
+import io
+import os
 from pathlib import Path
 import sys
 import tempfile
+import tarfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -17,6 +20,55 @@ OWNED = {'Labels': {'io.sohyeon.project': 'sohyeon-cicd', 'io.sohyeon.owner': 's
 
 
 class CleanupTests(unittest.TestCase):
+    def test_sudo_docker_reads_keep_state_in_deployment_account_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            current = {'Image': 'previous', 'State': {'Running': True}}
+            with patch.object(cleanup, 'STATE', state), patch.dict(os.environ, {'SOHYEON_DOCKER_SUDO': '1'}), patch.object(cleanup.subprocess, 'check_output', return_value=json.dumps([current])) as run:
+                cleanup.snapshot('v2-aaaaaaaaaaaa-2')
+                run.assert_called_once_with(
+                    ['sudo', '-n', '--', 'docker', '--host', 'unix:///var/run/docker.sock',
+                     'container', 'inspect', 'sohyeon-cicd-app'], text=True)
+            saved = state / 'previous-container.json'
+            self.assertEqual(saved.stat().st_uid, os.getuid())
+            self.assertEqual(saved.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(json.loads(saved.read_text())['container'], current)
+
+    def test_privileged_helper_rejects_docker_mutations(self):
+        with patch.dict(os.environ, {'SOHYEON_DOCKER_SUDO': '1'}), patch.object(cleanup.subprocess, 'check_output') as run:
+            for args in [('container', 'rm', 'other'), ('image', 'rm', 'other'),
+                         ('system', 'prune'), ('run', 'other'), ('load', '-i', 'other.tar')]:
+                with self.subTest(args=args), self.assertRaises(ValueError):
+                    cleanup.docker(*args)
+            run.assert_not_called()
+
+    def test_image_archive_rejects_foreign_tags_labels_and_extra_images(self):
+        release = 'v2-aaaaaaaaaaaa-2'
+        own_labels = dict(OWNED['Labels'], **{'io.sohyeon.release': release})
+        own_manifest = {'Config': 'config.json', 'RepoTags': [f'{cleanup.APP}:{release}']}
+        cases = [([own_manifest], own_labels, True),
+                 ([dict(own_manifest, RepoTags=['other:latest'])], own_labels, False),
+                 ([dict(own_manifest, RepoTags=[f'{cleanup.APP}:{release}', 'other:latest'])], own_labels, False),
+                 ([own_manifest, own_manifest], own_labels, False),
+                 ([own_manifest], {}, False),
+                 ([own_manifest], dict(own_labels, **{'io.sohyeon.owner': 'other'}), False),
+                 ([own_manifest], dict(own_labels, **{'io.sohyeon.release': 'wrong'}), False)]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'image.tar'
+            for manifest, labels, allowed in cases:
+                with self.subTest(manifest=manifest, labels=labels):
+                    with tarfile.open(path, 'w') as archive:
+                        for name, data in [('manifest.json', manifest), ('config.json', {'config': {'Labels': labels}})]:
+                            body = json.dumps(data).encode()
+                            member = tarfile.TarInfo(name)
+                            member.size = len(body)
+                            archive.addfile(member, io.BytesIO(body))
+                    if allowed:
+                        cleanup.validate_archive(path, release)
+                    else:
+                        with self.assertRaises(ValueError):
+                            cleanup.validate_archive(path, release)
+
     def test_lb_cleanup_removes_recorded_files_and_preserves_configuration(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

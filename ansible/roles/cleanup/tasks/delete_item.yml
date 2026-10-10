@@ -16,6 +16,7 @@
         name: "{{ cleanup_item.ref }}"
         force: false
         prune: false
+      become: true
       when: cleanup_item.kind == 'image'
       no_log: true
 

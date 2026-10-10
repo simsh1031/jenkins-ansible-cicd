@@ -31,17 +31,41 @@ class PrivilegeTests(unittest.TestCase):
                     {'cleanup_item': {'kind': 'file', 'path': path}})
                 self.assertEqual(result.returncode == 0, allowed, result.stdout + result.stderr)
 
-    def test_become_is_limited_to_nginx_system_operations(self):
+    def test_become_is_limited_to_docker_and_nginx_operations(self):
         allowed = {
             'ansible/roles/nginx_lb/tasks/main.yml',
             'ansible/roles/nginx_lb/handlers/main.yml',
             'ansible/playbook/prepare.yml',
             'ansible/playbook/deploy.yml',
+            'ansible/roles/ownership/tasks/main.yml',
+            'ansible/roles/app/tasks/main.yml',
+            'ansible/roles/cleanup/tasks/delete_item.yml',
         }
         for path in (ROOT / 'ansible').rglob('*.yml'):
             if 'become: true' in path.read_text():
                 self.assertIn(str(path.relative_to(ROOT)), allowed, str(path))
         self.assertFalse((ROOT / 'ansible/playbook/admin_setup.yml').exists())
+
+        def walk(tasks):
+            for task in tasks:
+                yield task
+                for key in ('tasks', 'pre_tasks', 'block', 'rescue', 'always'):
+                    yield from walk(task.get(key, []))
+
+        for path in (ROOT / 'ansible').rglob('*.yml'):
+            content = yaml.safe_load(path.read_text())
+            if not isinstance(content, list):
+                continue
+            for task in walk(content):
+                if any(key.startswith('community.docker.') for key in task):
+                    self.assertIs(task.get('become'), True, task['name'])
+                argv = task.get('ansible.builtin.command', {})
+                if isinstance(argv, dict) and 'cleanup.py' in str(argv):
+                    self.assertNotEqual(task.get('become'), True, task['name'])
+        for name in ('prepare', 'deploy', 'cleanup'):
+            for play in yaml.safe_load((ROOT / f'ansible/playbook/{name}.yml').read_text()):
+                if 'hosts' in play:
+                    self.assertIs(play.get('become'), False)
 
     def test_nginx_role_has_only_assigned_scope(self):
         text = (ROOT / 'ansible/roles/nginx_lb/tasks/main.yml').read_text()
@@ -70,6 +94,7 @@ class PrivilegeTests(unittest.TestCase):
         foreign = copy.deepcopy(own)
         foreign['container']['Config']['Labels']['io.sohyeon.owner'] = 'someone-else'
         self.assertNotEqual(execute(foreign).returncode, 0)
+        self.assertNotEqual(execute(foreign, True, {'app1': 'a' * 64}).returncode, 0)
         legacy = copy.deepcopy(own)
         legacy['container']['Config']['Labels'] = None
         self.assertNotEqual(execute(legacy, True).returncode, 0)

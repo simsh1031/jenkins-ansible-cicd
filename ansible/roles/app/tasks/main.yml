@@ -10,6 +10,7 @@
     state: stopped
     stop_timeout: 30
     force_kill: false
+  become: true
   no_log: true
 
 - name: Remove the stopped container
@@ -19,6 +20,7 @@
     state: absent
     force_kill: false
     keep_volumes: true
+  become: true
   no_log: true
 
 - name: Start the tested image with this server identity
@@ -42,4 +44,5 @@
     log_options:
       max-size: 10m
       max-file: '3'
+  become: true
   no_log: true

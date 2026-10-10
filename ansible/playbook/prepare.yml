@@ -54,6 +54,7 @@
         docker_host: unix:///var/run/docker.sock
         name: "{{ app_name }}"
       register: current_container
+      become: true
       no_log: true
 
     - name: Require the existing application to be running
@@ -66,6 +67,8 @@
     - name: Preserve previous healthy image and private container configuration
       ansible.builtin.command:
         argv: [python3, "{{ remote_tools }}/cleanup.py", snapshot, --release, "{{ image_tag }}"]
+      environment:
+        SOHYEON_DOCKER_SUDO: '1'
       no_log: true
       changed_when: true
 
@@ -95,12 +98,14 @@
       community.docker.docker_host_info:
         docker_host: unix:///var/run/docker.sock
       register: docker_root
+      become: true
       no_log: true
 
     # Docker 저장소가 있는 파일시스템의 남은 공간을 확인한다.
     - name: Check Docker storage space
       ansible.builtin.command:
         argv: [df, -Pm, "{{ docker_root.host_info.DockerRootDir }}"]
+      become: true
       register: docker_space
       changed_when: false
 
@@ -122,11 +127,17 @@
         argv: [python3, "{{ remote_tools }}/cleanup.py", record, --scope, app, --release, "{{ image_tag }}", --path, "{{ remote_tar_dir }}/{{ app_name }}-{{ image_tag }}.tar"]
       changed_when: true
 
+    - name: Reject foreign images or tags before privileged image loading
+      ansible.builtin.command:
+        argv: [python3, "{{ remote_tools }}/cleanup.py", validate-archive, --release, "{{ image_tag }}", --path, "{{ remote_tar_dir }}/{{ app_name }}-{{ image_tag }}.tar"]
+      changed_when: false
+
     # 기존 컨테이너를 중단하지 않고 전달받은 이미지를 Docker에 불러온다.
     - name: Load the new image without changing the running container
       community.docker.docker_image_load:
         docker_host: unix:///var/run/docker.sock
         path: "{{ remote_tar_dir }}/{{ app_name }}-{{ image_tag }}.tar"
+      become: true
 
     # 이미지 로드가 끝나면 이번 릴리스의 원격 임시 tar만 삭제한다.
     - name: Remove this release's transferred tar after loading

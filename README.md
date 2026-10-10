@@ -35,7 +35,7 @@ Ansible: app1 제외 → 연결 종료 대기 → 교체 → 검사 → 복귀
 
 - 기존 Week1 서비스가 앱 서버 3대와 Nginx LB에서 정상 동작하는 환경. 최초 서버 설치는 포함하지 않는다.
 - Jenkins `ansible-agent`에서 Python 3.10 이상, Ansible Core 2.16 이상, Docker·Git·SSH·Bash·`sha256sum` 사용 가능. Agent의 Docker 접근은 해당 Job의 이미지·테스트 컨테이너 범위로 운영한다.
-- SSH Credential `sohyeon-deploy-ssh`. 앱 서버는 비root 배포 계정의 Docker 접근과 Ansible 실행 Python의 `requests`가 필요하다. LB는 기존 Ansible `become` 정책으로 심소현 설정 파일을 검사·적용·reload할 수 있어야 한다.
+- SSH Credential `sohyeon-deploy-ssh`. 앱 서버는 비root 배포 계정과 기존 sudo 권한, Ansible 실행 Python의 `requests`가 필요하다. Docker 모듈은 개별 작업에서 `become`을 사용하고, 정리 도우미의 Docker 조회만 `sudo -n -- docker`로 실행한다. 상태·임시 파일은 배포 계정 소유로 유지한다. LB는 기존 Ansible `become` 정책으로 심소현 설정 파일을 검사·적용·reload할 수 있어야 한다.
 - 현재 inventory의 공인 IPv4 서버 주소를 사용한다. 앱 `20007`, LB `18007`을 변수로 관리한다.
 - LB는 `/etc/nginx/nginx.conf`의 `include /etc/nginx/conf.d/*.conf;` 구조와 `/run/nginx.pid`를 사용한다. 다른 구조면 검증 도우미·변수를 먼저 조정한다.
 - 서비스 트래픽은 LB로만 들어와야 한다. 앱 포트 직접 접근은 배포 검사에 한정한다. 남은 두 서버가 실습 트래픽을 감당할 수 있어야 한다.
@@ -106,7 +106,7 @@ ansible-playbook -i ansible/inventory.ini ansible/playbook/deploy.yml --syntax-c
 
 ### 관리자 권한 경계
 
-앱 컨테이너·상태 파일·임시 파일은 배포 계정 권한으로 처리한다. LB의 `become: true`는 심소현의 `/etc/nginx/conf.d/sohyeon.conf` 후보 검증·원자적 교체·`nginx -t`·reload와 워커 drain에만 사용한다. 다른 사용자 설정 파일, 공용 `nginx.conf`, Docker 서비스 재시작, 서버 재부팅은 건드리지 않는다. 공용 LB reload는 다른 스터디원의 배포와 동시에 실행하지 않도록 작업 시간을 조율해야 한다.
+상태·임시 파일은 배포 계정 권한으로 처리하고, Docker 모듈과 Docker 저장소 공간 검사는 개별 `become`으로 실행한다. 정리 도우미는 Docker 조회 명령에만 sudo를 사용한다. LB에서는 심소현의 `/etc/nginx/conf.d/sohyeon.conf` 후보 검증·원자적 교체·등록된 임시 파일 삭제·`nginx -t`·reload와 워커 drain에 기존 관리자 권한을 사용한다. 컨테이너 이름·소유권·포트, 이미지 tar의 태그·라벨과 삭제 대상의 소유권을 검사한다. 다른 사용자 설정 파일, 공용 `nginx.conf`, sudoers·계정 그룹·Docker 소켓 권한은 변경하지 않는다. 공용 LB reload는 다른 스터디원의 배포와 동시에 실행하지 않도록 작업 시간을 조율해야 한다.
 
 ## Ansible Galaxy
 

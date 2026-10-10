@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import tarfile
 
 APP = 'sohyeon-cicd-app'
 STATE = Path.home() / '.local/share/sohyeon-cicd/state'
@@ -17,7 +18,35 @@ RELEASE = re.compile(r'v[0-9]+-[0-9a-f]{12}-[0-9]+')
 
 
 def docker(*args):
-    return subprocess.check_output(['docker', '--host', 'unix:///var/run/docker.sock', *args], text=True).strip()
+    command = ['docker', '--host', 'unix:///var/run/docker.sock', *args]
+    if os.environ.get('SOHYEON_DOCKER_SUDO') == '1':
+        # Remote helpers retain the deployment user's HOME and file ownership.
+        # Only read operations go through sudo; Ansible performs guarded mutations.
+        if not (args[:1] == ('ps',) or args[:2] in (
+                ('container', 'inspect'), ('image', 'inspect'), ('image', 'ls'))):
+            raise ValueError('Privileged helper permits Docker inspection only')
+        command = ['sudo', '-n', '--', *command]
+    return subprocess.check_output(command, text=True).strip()
+
+
+def validate_archive(path, release):
+    """Reject archives that would import foreign tags or unowned images."""
+    with tarfile.open(safe_path(path), 'r:*') as archive:
+        def read_json(name):
+            member = archive.getmember(name)
+            if not member.isfile() or member.size > 1024 * 1024:
+                raise ValueError('Invalid image archive metadata')
+            with archive.extractfile(member) as source:
+                return json.load(source)
+        manifest = read_json('manifest.json')
+        if len(manifest) != 1 or manifest[0].get('RepoTags') != [f'{APP}:{release}']:
+            raise ValueError('Archive must contain only the assigned project release')
+        config = read_json(manifest[0]['Config'])
+        labels = config.get('config', {}).get('Labels') or {}
+        if (labels.get('io.sohyeon.owner') != OWNER
+                or labels.get('io.sohyeon.project') != 'sohyeon-cicd'
+                or labels.get('io.sohyeon.release') != release):
+            raise ValueError('Archive image ownership or release is unconfirmed')
 
 
 def inspect(kind, ref):
@@ -267,7 +296,7 @@ def module_action(action, plan, args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['snapshot', 'record', 'test-cleanup', 'plan', 'apply',
+    parser.add_argument('action', choices=['snapshot', 'record', 'validate-archive', 'test-cleanup', 'plan', 'apply',
                                       'validate-plan', 'check-item', 'record-deleted', 'record-failure'])
     parser.add_argument('--scope', choices=['app', 'agent', 'lb'], default='app')
     parser.add_argument('--release', required=True)
@@ -281,7 +310,9 @@ def main():
     args = parser.parse_args()
     if not RELEASE.fullmatch(args.release):
         parser.error('Invalid release ID')
-    if args.action == 'snapshot':
+    if args.action == 'validate-archive':
+        validate_archive(args.path, args.release)
+    elif args.action == 'snapshot':
         snapshot(args.release)
     elif args.action == 'record':
         record_file(args.scope, args.path)

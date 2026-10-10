@@ -45,6 +45,7 @@
         docker_host: unix:///var/run/docker.sock
         name: "{{ image_name }}:{{ image_tag }}"
       register: prepared_image
+      become: true
       failed_when: prepared_image.images | length != 1
       no_log: true
 

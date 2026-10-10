@@ -10,6 +10,8 @@
     name: "{{ playbook_dir }}/../roles/runtime"
 
 - name: Plan or apply project cleanup
+  environment:
+    SOHYEON_DOCKER_SUDO: "{{ '1' if cleanup_scope == 'app' else '0' }}"
   block:
     - name: Plan or validate the archived cleanup plan
       ansible.builtin.command:
