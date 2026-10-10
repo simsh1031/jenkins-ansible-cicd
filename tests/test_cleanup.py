@@ -20,6 +20,18 @@ OWNED = {'Labels': {'io.sohyeon.project': 'sohyeon-cicd', 'io.sohyeon.owner': 's
 
 
 class CleanupTests(unittest.TestCase):
+    def test_lb_down_check_ignores_comments_but_rejects_disabled_upstream(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / 'sohyeon.conf'
+            (root / 'nginx.previous.conf').write_text('recovery')
+            with patch.object(cleanup, 'STATE', root), patch.object(cleanup, 'CONFIG', config):
+                config.write_text('# A server can be marked down during deployment\nserver 127.0.0.1:20007;\n')
+                self.assertEqual(cleanup.make_plan('lb', 'v1-aaaaaaaaaaaa-1')['candidates'], [])
+                config.write_text('# comment\nserver 127.0.0.1:20007 down;\n')
+                with self.assertRaisesRegex(ValueError, 'still excluded'):
+                    cleanup.make_plan('lb', 'v1-aaaaaaaaaaaa-1')
+
     def test_sudo_docker_reads_keep_state_in_deployment_account_directory(self):
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory)

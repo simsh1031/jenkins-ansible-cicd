@@ -210,7 +210,7 @@ def make_plan(scope, release, protection_dir=None):
         previous = safe_path(STATE / 'nginx.previous.conf')
         if not previous.is_file():
             raise ValueError('Missing known-good Nginx backup')
-        if ' down' in CONFIG.read_text():
+        if ' down' in re.sub(r'(?m)#.*$', '', CONFIG.read_text()):
             raise ValueError('An upstream is still excluded')
     if scope in ('app', 'lb'):
         candidates.extend(recorded_files(scope))

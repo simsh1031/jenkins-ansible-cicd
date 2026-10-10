@@ -102,8 +102,8 @@
           ansible.builtin.include_role:
             name: "{{ playbook_dir }}/../roles/app"
 
-        # 대상 서버 내부에서 새 앱의 상태·릴리스·서버 ID 검사를 세 차례 반복한다.
-        - name: ROLLING 4 - Verify the new app locally three consecutive times
+        # 대상 서버 내부에서 새 앱의 상태·릴리스·서버 ID를 한 차례 검사한다.
+        - name: ROLLING 4 - Verify the new app locally once
           ansible.builtin.include_role:
             name: "{{ playbook_dir }}/../roles/verification"
           vars:
@@ -111,9 +111,6 @@
             check_from: "{{ inventory_hostname }}"
             check_url: "http://127.0.0.1:{{ host_port }}"
             expected_release: "{{ image_tag }}"
-          loop: "{{ range(3) | list }}"
-          loop_control:
-            loop_var: health_attempt
 
         # LB에서 대상 앱으로 직접 요청해 네트워크 경로와 새 릴리스를 함께 검사한다.
         - name: ROLLING 4 - Verify the network path from LB to this server

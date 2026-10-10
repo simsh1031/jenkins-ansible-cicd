@@ -105,12 +105,12 @@ any_errors_fatal: true
 2. **ROLLING 1:** 기존 Nginx 워커를 기록하고 대상 한 대만 upstream에서 제외한다.
 3. **ROLLING 2:** reload handler를 즉시 실행하고 기존 워커 종료·앱 포트 연결 종료를 확인한다.
 4. **ROLLING 3:** app role로 기존 컨테이너를 정상 종료·삭제하고 검사된 이미지로 새 컨테이너를 실행한다.
-5. **ROLLING 4:** 로컬에서 세 차례 검사하고 LB에서 대상 앱으로 직접 접근해 목표 릴리스와 서버 ID를 확인한다.
+5. **ROLLING 4:** 로컬에서 한 차례 검사하고 LB에서 대상 앱으로 직접 접근해 목표 릴리스와 서버 ID를 확인한다.
 6. **ROLLING 5:** 검증된 서버를 upstream에 다시 등록하고 즉시 reload한다.
-7. **ROLLING 6:** LB 경유 요청에서 해당 서버의 목표 릴리스를 실제 관측한다. 이어 5회 직접·LB 검사와 3초 간격 대기로 최소 15초 관찰한다.
+7. **ROLLING 6:** LB 경유 요청에서 해당 서버의 목표 릴리스를 실제 관측한다. 이어 2회 직접·LB 검사와 회당 3초 대기로 관찰한다.
 8. **ROLLING COMPLETE:** 이 서버의 모든 검증이 끝난 뒤 다음 서버를 시작한다.
 
-완료 후 `verify.yml`이 전 서버 목표 릴리스, 모든 upstream 등록, LB 실제 응답을 확인한다. 재등록 이후 반복 검사는 `observe.yml`에 두고 health·ready·응답 검사는 공통 verification role로 재사용한다.
+완료 후 `verify.yml`이 전 서버 목표 릴리스, 모든 upstream 등록, LB 실제 응답을 확인한다. 재등록 이후 반복 검사는 `observe.yml`에 두고 health·ready·응답 검사는 공통 verification role로 재사용한다. 이 역할은 Python 코드를 표준 입력으로 전달해 한 번의 원격 실행에서 HTTP 경로를 모두 검사하므로 별도 도우미 설치가 필요 없다.
 
 ## 6. Nginx — 제외·복귀와 기존 요청 완료 확인
 

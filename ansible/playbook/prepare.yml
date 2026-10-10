@@ -165,7 +165,7 @@
     - name: Refuse to reset an excluded or unexpected upstream
       ansible.builtin.assert:
         that:
-          - "' down' not in (existing_nginx.content | b64decode)"
+          - "' down' not in (existing_nginx.content | b64decode | regex_replace('(?m)#.*$', ''))"
           - "(existing_nginx.content | b64decode | regex_findall('server\\s+([0-9.]+):' ~ (host_port | string) ~ ';') | sort) == (groups['app_servers'] | map('extract', hostvars, 'ansible_host') | sort)"
           - "('listen ' ~ (lb_port | string) ~ ';') in (existing_nginx.content | b64decode)"
         fail_msg: "Nginx differs from the expected three active servers. Inspect it before retrying."

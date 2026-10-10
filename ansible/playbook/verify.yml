@@ -34,7 +34,7 @@
     - name: Confirm all three upstreams are registered
       ansible.builtin.assert:
         that:
-          - "' down' not in (final_nginx.content | b64decode)"
+          - "' down' not in (final_nginx.content | b64decode | regex_replace('(?m)#.*$', ''))"
           - "(final_nginx.content | b64decode | regex_findall('server\\s+([0-9.]+):' ~ (host_port | string) ~ ';') | sort) == (groups['app_servers'] | map('extract', hostvars, 'ansible_host') | sort)"
 
     # LB를 통해 실제 서비스 응답을 요청한다.
