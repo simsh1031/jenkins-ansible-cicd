@@ -1,0 +1,81 @@
+# 파일 역할: 지정한 위치에서 앱의 health·readiness·실제 응답·서버 ID·릴리스·버전 일치를 검사한다.
+---
+# check_host: 앱 inventory 이름, check_from: 검사 실행 호스트.
+# expected_release가 비어 있으면 현재 정상 릴리스를 확인한다.
+# 지정한 검사 위치에서 health가 200과 OK를 반환할 때까지 재시도한다.
+- name: Check application health
+  ansible.builtin.uri:
+    url: "{{ check_url }}/health"
+    return_content: true
+    timeout: "{{ request_timeout }}"
+  delegate_to: "{{ check_from }}"
+  register: health
+  retries: "{{ health_retries }}"
+  delay: "{{ health_delay }}"
+  until: health.status == 200 and health.content | default('') | trim == 'OK'
+
+# 앱의 기본 경로 응답을 읽어 실제 서비스 상태와 처리 서버를 확인한다.
+- name: Read service response and server identity
+  ansible.builtin.uri:
+    url: "{{ check_url }}/"
+    return_content: true
+    timeout: "{{ request_timeout }}"
+  delegate_to: "{{ check_from }}"
+  register: service_response
+
+# 응답에 JSON이 있는지 확인해 기존 Week1 앱과 새 앱의 검사 방식을 구분한다.
+- name: Determine the response contract
+  ansible.builtin.set_fact:
+    legacy_response: "{{ service_response.json is not defined }}"
+
+# 명시한 최초 전환에서만 정확한 Week1 응답을 허용한다.
+- name: Allow old Week1 responses only during explicit bootstrap
+  ansible.builtin.assert:
+    that:
+      - not (legacy_response | bool) or (bootstrap | bool and expected_release | default('') == '')
+      - not (legacy_response | bool) or service_response.content | trim == 'Sohyeon Jenkins + Ansible CI/CD'
+
+# 새 앱일 때 readiness와 이미지에 기록된 릴리스 정보 검사를 수행한다.
+- name: Check readiness and immutable release
+  when: not (legacy_response | bool)
+  block:
+    # 앱이 요청을 받을 준비를 마치고 ready=true를 반환할 때까지 기다린다.
+    - name: Wait for readiness
+      ansible.builtin.uri:
+        url: "{{ check_url }}/ready"
+        return_content: true
+        timeout: "{{ request_timeout }}"
+      delegate_to: "{{ check_from }}"
+      register: readiness
+      retries: "{{ health_retries }}"
+      delay: "{{ health_delay }}"
+      until: readiness.status == 200 and readiness.json.ready | default(false) | bool
+
+    # 기본 응답과 readiness의 일치 여부, 서버 ID, 서비스명, 커밋과 기대 릴리스를 검사한다.
+    - name: Verify server identity and release
+      ansible.builtin.assert:
+        that:
+          - service_response.json.ready | bool
+          - service_response.json.server_id == check_host
+          - service_response.json.service == app_name
+          - service_response.json.release_id | length > 0
+          - service_response.json.git_revision | length > 0
+          - readiness.json == service_response.json
+          - expected_release | default('') == '' or service_response.json.release_id == expected_release
+
+# version 경로에서 앱이 반환하는 버전 문자열을 읽는다.
+- name: Check version endpoint
+  ansible.builtin.uri:
+    url: "{{ check_url }}/version"
+    return_content: true
+    timeout: "{{ request_timeout }}"
+  delegate_to: "{{ check_from }}"
+  register: version_response
+
+# 버전 응답이 비어 있지 않고 기본 응답 및 기대 버전과 일치하는지 확인한다.
+- name: Verify version consistency
+  ansible.builtin.assert:
+    that:
+      - version_response.content | trim | length > 0
+      - legacy_response | bool or version_response.content | trim == service_response.json.version
+      - expected_release | default('') == '' or version_response.content | trim == app_version

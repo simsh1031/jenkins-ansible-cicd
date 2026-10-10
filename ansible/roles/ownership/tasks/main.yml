@@ -1,0 +1,31 @@
+---
+- name: Refuse application name or port overrides outside the assigned scope
+  ansible.builtin.assert:
+    that:
+      - app_name == 'sohyeon-cicd-app'
+      - image_name == 'sohyeon-cicd-app'
+      - host_port | int == 20007
+      - container_port | int == 80
+- name: Inspect the exact application before changing it
+  community.docker.docker_container_info:
+    docker_host: unix:///var/run/docker.sock
+    name: sohyeon-cicd-app
+  register: owned_container
+  no_log: true
+- name: Require the application to exist
+  ansible.builtin.assert:
+    that: owned_container.exists
+- name: Require labels or an explicitly approved legacy container ID and the assigned port
+  ansible.builtin.assert:
+    that:
+      - owned_container.container.Name == '/sohyeon-cicd-app'
+      - >-
+        ((owned_container.container.Config.Labels | default({}, true)).get('io.sohyeon.owner') == 'sohyeon'
+        and (owned_container.container.Config.Labels | default({}, true)).get('io.sohyeon.project') == 'sohyeon-cicd')
+        or (bootstrap | bool and owned_container.container.Id == legacy_container_ids.get(inventory_hostname, ''))
+      - owned_container.container.HostConfig.PortBindings | default({}, true) | length == 1
+      - >-
+        (owned_container.container.HostConfig.PortBindings | default({}, true)).get('80/tcp', [])
+        | map(attribute='HostPort') | list == ['20007']
+    fail_msg: Ownership or assigned port is unconfirmed. Do not replace this container.
+  no_log: true
